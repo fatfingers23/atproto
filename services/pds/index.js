@@ -1,7 +1,7 @@
 /* eslint-env node */
 
 'use strict'
-
+require('dotenv').config()
 const {
   PDS,
   envToCfg,

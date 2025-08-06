@@ -1,18 +1,20 @@
 import * as plc from '@did-plc/lib'
 import { isEmailValid } from '@hapi/address'
 import { isDisposableEmail } from 'disposable-email-domains-js'
+import { AtpAgent } from '@atproto/api'
 import { DidDocument, MINUTE, check } from '@atproto/common'
 import { ExportableKeypair, Keypair, Secp256k1Keypair } from '@atproto/crypto'
 import { AtprotoData, ensureAtpDocument } from '@atproto/identity'
 import { AuthRequiredError, InvalidRequestError } from '@atproto/xrpc-server'
-import { AccountStatus } from '../../../../account-manager/account-manager'
+// import { AccountStatus } from '../../../../account-manager/account-manager'
 import { NEW_PASSWORD_MAX_LENGTH } from '../../../../account-manager/helpers/scrypt'
 import { AppContext } from '../../../../context'
 import { baseNormalizeAndValidate } from '../../../../handle'
 import { Server } from '../../../../lexicon'
 import { InputSchema as CreateAccountInput } from '../../../../lexicon/types/com/atproto/server/createAccount'
-import { syncEvtDataFromCommit } from '../../../../sequencer'
-import { safeResolveDidDoc } from './util'
+import fs from 'node:fs/promises'
+// import { syncEvtDataFromCommit } from '../../../../sequencer'
+// import { safeResolveDidDoc } from './util'
 
 export default function (server: Server, ctx: AppContext) {
   server.com.atproto.server.createAccount({
@@ -21,7 +23,7 @@ export default function (server: Server, ctx: AppContext) {
       points: 100,
     },
     auth: ctx.authVerifier.userServiceAuthOptional,
-    handler: async ({ input, auth, req }) => {
+    handler: async ({ input, auth }) => {
       // @NOTE Until this code and the OAuthStore's `createAccount` are
       // refactored together, any change made here must be reflected over there.
 
@@ -31,75 +33,101 @@ export default function (server: Server, ctx: AppContext) {
         handle,
         email,
         password,
-        inviteCode,
-        signingKey,
+        // inviteCode,
+        // signingKey,
         plcOp,
-        deactivated,
+        // deactivated,
       } = ctx.entrywayAgent
         ? await validateInputsForEntrywayPds(ctx, input.body)
         : await validateInputsForLocalPds(ctx, input.body, requester)
 
       let didDoc: DidDocument | undefined
-      let creds: { accessJwt: string; refreshJwt: string }
-      await ctx.actorStore.create(did, signingKey)
-      try {
-        const commit = await ctx.actorStore.transact(did, (actorTxn) =>
-          actorTxn.repo.createRepo([]),
-        )
+      // let creds: { accessJwt: string; refreshJwt: string }
 
-        // Generate a real did with PLC
-        if (plcOp) {
-          try {
-            await ctx.plcClient.sendOperation(did, plcOp)
-          } catch (err) {
-            req.log.error(
-              { didKey: ctx.plcRotationKey.did(), handle },
-              'failed to create did:plc',
-            )
-            throw err
-          }
-        }
+      //TODO hacky hack
+      const pdsAgent = new AtpAgent({
+        service: 'https://pds-one.skeetcentral.com',
+      })
 
-        didDoc = await safeResolveDidDoc(ctx, did, true)
-
-        creds = await ctx.accountManager.createAccountAndSession({
-          did,
-          handle,
-          email,
-          password,
-          repoCid: commit.cid,
-          repoRev: commit.rev,
-          inviteCode,
-          deactivated,
-        })
-
-        if (!deactivated) {
-          await ctx.sequencer.sequenceIdentityEvt(did, handle)
-          await ctx.sequencer.sequenceAccountEvt(did, AccountStatus.Active)
-          await ctx.sequencer.sequenceCommit(did, commit)
-          await ctx.sequencer.sequenceSyncEvt(
-            did,
-            syncEvtDataFromCommit(commit),
-          )
-        }
-        await ctx.accountManager.updateRepoRoot(did, commit.cid, commit.rev)
-        await ctx.actorStore.clearReservedKeypair(signingKey.did(), did)
-      } catch (err) {
-        // this will only be reached if the actor store _did not_ exist before
-        await ctx.actorStore.destroy(did)
-        throw err
-      }
-
+      // @ts-ignore
+      const result = await pdsAgent.com.atproto.server.createAccount({
+        email,
+        handle,
+        did: did,
+        password,
+        //@ts-ignore
+        plcOp: plcOp,
+      })
       return {
         encoding: 'application/json',
         body: {
           handle,
           did: did,
           didDoc,
-          accessJwt: creds.accessJwt,
-          refreshJwt: creds.refreshJwt,
+          accessJwt: result.data.accessJwt,
+          refreshJwt: result.data.refreshJwt,
         },
       }
+
+      //   await ctx.actorStore.create(did, signingKey)
+      //   try {
+      //     const commit = await ctx.actorStore.transact(did, (actorTxn) =>
+      //       actorTxn.repo.createRepo([]),
+      //     )
+      //
+      //     // Generate a real did with PLC
+      //     if (plcOp) {
+      //       try {
+      //         await ctx.plcClient.sendOperation(did, plcOp)
+      //       } catch (err) {
+      //         req.log.error(
+      //           { didKey: ctx.plcRotationKey.did(), handle },
+      //           'failed to create did:plc',
+      //         )
+      //         throw err
+      //       }
+      //     }
+      //
+      //     didDoc = await safeResolveDidDoc(ctx, did, true)
+      //
+      //     creds = await ctx.accountManager.createAccountAndSession({
+      //       did,
+      //       handle,
+      //       email,
+      //       password,
+      //       repoCid: commit.cid,
+      //       repoRev: commit.rev,
+      //       inviteCode,
+      //       deactivated,
+      //     })
+      //
+      //     if (!deactivated) {
+      //       await ctx.sequencer.sequenceIdentityEvt(did, handle)
+      //       await ctx.sequencer.sequenceAccountEvt(did, AccountStatus.Active)
+      //       await ctx.sequencer.sequenceCommit(did, commit)
+      //       await ctx.sequencer.sequenceSyncEvt(
+      //         did,
+      //         syncEvtDataFromCommit(commit),
+      //       )
+      //     }
+      //     await ctx.accountManager.updateRepoRoot(did, commit.cid, commit.rev)
+      //     await ctx.actorStore.clearReservedKeypair(signingKey.did(), did)
+      //   } catch (err) {
+      //     // this will only be reached if the actor store _did not_ exist before
+      //     await ctx.actorStore.destroy(did)
+      //     throw err
+      //   }
+      //
+      //   return {
+      //     encoding: 'application/json',
+      //     body: {
+      //       handle,
+      //       did: did,
+      //       didDoc,
+      //       accessJwt: creds.accessJwt,
+      //       refreshJwt: creds.refreshJwt,
+      //     },
+      //   }
     },
   })
 }
@@ -206,19 +234,23 @@ const validateInputsForLocalPds = async (
   }
 
   // check that the handle and email are available
-  const [handleAccnt, emailAcct] = await Promise.all([
-    ctx.accountManager.getAccount(handle),
-    ctx.accountManager.getAccountByEmail(email),
-  ])
-  if (handleAccnt) {
-    throw new InvalidRequestError(`Handle already taken: ${handle}`)
-  } else if (emailAcct) {
-    throw new InvalidRequestError(`Email already taken: ${email}`)
-  }
+  //TODO this would be a check if we have that handle anywhere
+  // const [handleAccnt, emailAcct] = await Promise.all([
+  //   ctx.accountManager.getAccount(handle),
+  //   ctx.accountManager.getAccountByEmail(email),
+  // ])
+  // if (handleAccnt) {
+  //   throw new InvalidRequestError(`Handle already taken: ${handle}`)
+  // } else if (emailAcct) {
+  //   throw new InvalidRequestError(`Email already taken: ${email}`)
+  // }
 
   // determine the did & any plc ops we need to send
   // if the provided did document is poorly setup, we throw
-  const signingKey = await Secp256k1Keypair.create({ exportable: true })
+  // const signingKey = await Secp256k1Keypair.create({ exportable: true })
+  const signingKey = ctx.plcRotationKey
+
+  // await fs.writeFile('./key', await signingKey.export())
 
   let did: string
   let plcOp: plc.Operation | null
@@ -271,7 +303,8 @@ const formatDidAndPlcOp = async (
     signingKey: signingKey.did(),
     rotationKeys,
     handle,
-    pds: ctx.cfg.service.publicUrl,
+    //TODO hack
+    pds: 'https://pds-one.skeetcentral.com',
     signer: ctx.plcRotationKey,
   })
   return {
