@@ -240,7 +240,7 @@ export class AppContext {
       cfg.identity.serviceHandleDomains,
       cfg.db,
     )
-    await accountManager.migrateOrThrow()
+    // await accountManager.migrateOrThrow()
 
     const plcRotationKey =
       secrets.plcRotationKey.provider === 'kms'

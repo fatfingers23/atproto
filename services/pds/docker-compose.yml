@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pds-postgres-data:/var/lib/postgresql/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - pds-network
+  redis:
+    image: 'redis:alpine'
+    restart: always
+    ports:
+      - '${FORWARD_REDIS_PORT:-6379}:6379'
+    volumes:
+      - 'pds-redis:/data'
+    networks:
+      - pds-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      retries: 3
+      timeout: 5s
+volumes:
+  pds-postgres-data:
+  pds-redis:
+networks:
+  pds-network:
+    driver: bridge

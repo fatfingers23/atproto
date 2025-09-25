@@ -1,7 +1,7 @@
 import { Kysely } from 'kysely'
 
 export default {
-  '001': {
+  '001-did_doc': {
     up: async (db: Kysely<unknown>) => {
       await db.schema
         .createTable('did_doc')

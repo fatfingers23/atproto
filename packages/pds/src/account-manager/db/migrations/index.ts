@@ -5,9 +5,9 @@ import * as mig004 from './004-oauth'
 import * as mig005 from './005-oauth-account-management'
 
 export default {
-  '001': mig001,
-  '002': mig002,
-  '003': mig003,
-  '004': mig004,
-  '005': mig005,
+  '001_account-manager': mig001,
+  '002_account-manager': mig002,
+  '003_account-manager': mig003,
+  '004_account-manager': mig004,
+  '005_account-manager': mig005,
 }

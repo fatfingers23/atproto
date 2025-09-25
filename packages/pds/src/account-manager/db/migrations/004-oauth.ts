@@ -59,7 +59,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 
   await db.schema
     .createTable('token')
-    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('id', 'integer', (col) => col.primaryKey())
     .addColumn('did', 'varchar', (col) => col.notNull())
     .addColumn('tokenId', 'varchar', (col) => col.notNull())
     .addColumn('createdAt', 'varchar', (col) => col.notNull())

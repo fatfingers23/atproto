@@ -1,5 +1,6 @@
 import { Database, Migrator } from '../../db'
-import migrations from './migrations'
+// import migrations from './migrations'
+import allMigrations from '../../db/allMigrations'
 import { DidCacheSchema } from './schema'
 
 export * from './schema'
@@ -17,5 +18,5 @@ export const getDb = (
 }
 
 export const getMigrator = (db: DidCacheDb) => {
-  return new Migrator(db.db, migrations)
+  return new Migrator(db.db, allMigrations)
 }

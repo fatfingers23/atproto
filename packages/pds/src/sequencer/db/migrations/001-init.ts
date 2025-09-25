@@ -3,7 +3,7 @@ import { Kysely } from 'kysely'
 export async function up(db: Kysely<unknown>): Promise<void> {
   await db.schema
     .createTable('repo_seq')
-    .addColumn('seq', 'integer', (col) => col.autoIncrement().primaryKey())
+    .addColumn('seq', 'integer', (col) => col.primaryKey())
     .addColumn('did', 'varchar', (col) => col.notNull())
     .addColumn('eventType', 'varchar', (col) => col.notNull())
     .addColumn('event', 'blob', (col) => col.notNull())

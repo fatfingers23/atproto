@@ -7,10 +7,12 @@ import {
   PluginTransformResultArgs,
   QueryResult,
   RootOperationNode,
-  SqliteDialect,
+  // SqliteDialect,
+  PostgresDialect,
   UnknownRow,
   sql,
 } from 'kysely'
+import { Pool } from 'pg'
 import { dbLogger } from '../logger'
 import { retrySqlite } from './util'
 
@@ -28,26 +30,39 @@ export class Database<Schema> {
     location: string,
     opts?: { pragmas?: Record<string, string> },
   ): Database<T> {
-    const sqliteDb = new SqliteDB(location, {
-      timeout: 0, // handled by application
-    })
-    const pragmas = {
-      ...DEFAULT_PRAGMAS,
-      ...(opts?.pragmas ?? {}),
-    }
-    for (const pragma of Object.keys(pragmas)) {
-      sqliteDb.pragma(`${pragma} = ${pragmas[pragma]}`)
-    }
-    const db = new Kysely<T>({
-      dialect: new SqliteDialect({
-        database: sqliteDb,
+    // const sqliteDb = new SqliteDB(location, {
+    //   timeout: 0, // handled by application
+    // })
+    // const pragmas = {
+    //   ...DEFAULT_PRAGMAS,
+    //   ...(opts?.pragmas ?? {}),
+    // }
+    // for (const pragma of Object.keys(pragmas)) {
+    //   sqliteDb.pragma(`${pragma} = ${pragmas[pragma]}`)
+    // }
+    const dialect = new PostgresDialect({
+      pool: new Pool({
+        database: 'pds',
+        host: 'localhost',
+        user: 'postgres',
+        password: 'supersecurepassword123987',
+        port: 5432,
+        max: 10,
       }),
     })
+
+    const db = new Kysely<T>({
+      // dialect: new SqliteDialect({
+      //   database: sqliteDb,
+      // }),
+      dialect,
+    })
+
     return new Database(db)
   }
 
   async ensureWal() {
-    await sql`PRAGMA journal_mode = WAL`.execute(this.db)
+    // await sql`PRAGMA journal_mode = WAL`.execute(this.db)
   }
 
   async transactionNoRetry<T>(
