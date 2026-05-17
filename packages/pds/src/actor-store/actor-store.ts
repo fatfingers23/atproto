@@ -163,15 +163,20 @@ export class ActorStore {
 
     let db: ActorDb
     if (this.turso && dbName) {
-      await this.turso.createDatabase(dbName)
-      db = getDb({
-        location: dbLocation,
-        disableWalAutoCheckpoint: this.cfg.disableWalAutoCheckpoint,
-        turso: {
-          url: this.turso.buildDatabaseUrl(dbName),
-          authToken: this.tursoCfg?.databaseAuthToken,
-        },
-      })
+      try {
+        await this.turso.createDatabase(dbName)
+        db = getDb({
+          location: dbLocation,
+          disableWalAutoCheckpoint: this.cfg.disableWalAutoCheckpoint,
+          turso: {
+            url: this.turso.buildDatabaseUrl(dbName),
+            authToken: this.tursoCfg?.databaseAuthToken,
+          },
+        })
+      } catch (err) {
+        console.error(err)
+        throw err
+      }
     } else {
       db = getDb({
         location: dbLocation,

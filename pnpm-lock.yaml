@@ -1825,6 +1825,9 @@ importers:
       '@libsql/kysely-libsql':
         specifier: ^0.4.1
         version: 0.4.1(kysely@0.22.0)
+      '@tursodatabase/api':
+        specifier: ^2.0.0
+        version: 2.0.0
       better-sqlite3:
         specifier: ^10.0.0
         version: 10.0.0
@@ -8688,6 +8691,12 @@ packages:
   /@tsconfig/node16@1.0.4:
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
     dev: true
+
+  /@tursodatabase/api@2.0.0:
+    resolution: {integrity: sha512-WMmIvG5qiJbyHmD2ZbYJxJwMbKfXIrCwXJFoMyoL5WCXgWtfTbNUNAgeBg1ltSEDO1eD+BEJmihlRQbFuG4P5w==}
+    dependencies:
+      whatwg-fetch: 3.6.20
+    dev: false
 
   /@types/babel__core@7.20.5:
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
