@@ -4,6 +4,7 @@ import { SECOND, wait } from '@atproto/common'
 import { decode as cborDecode } from '@atproto/lex-cbor'
 import { DatetimeString, DidString, HandleString } from '@atproto/syntax'
 import { AccountStatus } from '../account-manager/helpers/account'
+import { TursoDbConfig } from '../config'
 import { Crawlers } from '../crawlers'
 import { seqLogger as log } from '../logger'
 import { CommitDataWithOps, SyncEvtData } from '../repo'
@@ -39,11 +40,16 @@ export class Sequencer extends (EventEmitter as new () => SequencerEmitter) {
     public crawlers: Crawlers,
     public lastSeen = 0,
     disableWalAutoCheckpoint = false,
+    turso: TursoDbConfig | null = null,
   ) {
     super()
     // note: this does not err when surpassed, just prints a warning to stderr
     this.setMaxListeners(100)
-    this.db = getDb(dbLocation, disableWalAutoCheckpoint)
+    this.db = getDb({
+      location: dbLocation,
+      disableWalAutoCheckpoint,
+      turso,
+    })
   }
 
   async start() {

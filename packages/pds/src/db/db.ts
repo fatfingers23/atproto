@@ -1,5 +1,6 @@
 import assert from 'node:assert'
 import SqliteDB from 'better-sqlite3'
+import { LibsqlDialect } from '@libsql/kysely-libsql'
 import {
   Kysely,
   KyselyPlugin,
@@ -18,11 +19,16 @@ const DEFAULT_PRAGMAS = {
   // strict: 'ON', // @TODO strictness should live on table defs instead
 }
 
+export type DialectKind = 'sqlite' | 'libsql'
+
 export class Database<Schema> {
   destroyed = false
   commitHooks: CommitHook[] = []
 
-  constructor(public db: Kysely<Schema>) {}
+  constructor(
+    public db: Kysely<Schema>,
+    public dialectKind: DialectKind = 'sqlite',
+  ) {}
 
   static sqlite<T>(
     location: string,
@@ -43,10 +49,19 @@ export class Database<Schema> {
         database: sqliteDb,
       }),
     })
-    return new Database(db)
+    return new Database(db, 'sqlite')
+  }
+
+  static libsql<T>(url: string, authToken?: string): Database<T> {
+    const db = new Kysely<T>({
+      dialect: new LibsqlDialect({ url, authToken }),
+    })
+    return new Database(db, 'libsql')
   }
 
   async ensureWal() {
+    // libsql is WAL-only; the pragma is unnecessary and not all backends accept it.
+    if (this.dialectKind === 'libsql') return
     await sql`PRAGMA journal_mode = WAL`.execute(this.db)
   }
 
@@ -59,7 +74,7 @@ export class Database<Schema> {
       .withPlugin(leakyTxPlugin)
       .transaction()
       .execute(async (txn) => {
-        const dbTxn = new Database(txn)
+        const dbTxn = new Database(txn, this.dialectKind)
         try {
           const txRes = await fn(dbTxn)
           leakyTxPlugin.endTx()

@@ -5,7 +5,7 @@ import { fileExists, readIfExists, rmIfExists } from '@atproto/common'
 import * as crypto from '@atproto/crypto'
 import { ExportableKeypair, Keypair } from '@atproto/crypto'
 import { InvalidRequestError } from '@atproto/xrpc-server'
-import { ActorStoreConfig } from '../config'
+import { ActorStoreConfig, TursoActorStoreConfig } from '../config'
 import { retrySqlite } from '../db'
 import { DiskBlobStore } from '../disk-blobstore'
 import { blobStoreLogger } from '../logger'
@@ -14,15 +14,32 @@ import { ActorStoreResources } from './actor-store-resources'
 import { ActorStoreTransactor } from './actor-store-transactor'
 import { ActorStoreWriter } from './actor-store-writer'
 import { ActorDb, getDb, getMigrator } from './db'
+import { TursoPlatformClient } from './turso-platform'
+
+// Turso DB names must be lowercase alphanumeric + dashes, length-limited.
+// The did's sha256 hex hash is safe; truncate to keep names short.
+const TURSO_DID_HASH_LEN = 40
 
 export class ActorStore {
   reservedKeyDir: string
+  turso: TursoPlatformClient | null
 
   constructor(
     public cfg: ActorStoreConfig,
     public resources: ActorStoreResources,
   ) {
     this.reservedKeyDir = path.join(cfg.directory, 'reserved_keys')
+    this.turso = cfg.turso ? new TursoPlatformClient(cfg.turso) : null
+  }
+
+  private get tursoCfg(): TursoActorStoreConfig | null {
+    return this.cfg.turso
+  }
+
+  private dbNameFromHash(didHash: string): string {
+    const cfg = this.tursoCfg
+    if (!cfg) throw new Error('turso not configured')
+    return `${cfg.dbNamePrefix}${didHash.slice(0, TURSO_DID_HASH_LEN)}`
   }
 
   async getLocation(did: string) {
@@ -30,11 +47,15 @@ export class ActorStore {
     const directory = path.join(this.cfg.directory, didHash.slice(0, 2), did)
     const dbLocation = path.join(directory, `store.sqlite`)
     const keyLocation = path.join(directory, `key`)
-    return { directory, dbLocation, keyLocation }
+    const dbName = this.tursoCfg ? this.dbNameFromHash(didHash) : undefined
+    return { directory, dbLocation, keyLocation, dbName }
   }
 
   async exists(did: string): Promise<boolean> {
     const location = await this.getLocation(did)
+    if (this.turso && location.dbName) {
+      return this.turso.databaseExists(location.dbName)
+    }
     return await fileExists(location.dbLocation)
   }
 
@@ -45,13 +66,28 @@ export class ActorStore {
   }
 
   async openDb(did: string): Promise<ActorDb> {
-    const { dbLocation } = await this.getLocation(did)
-    const exists = await fileExists(dbLocation)
-    if (!exists) {
-      throw new InvalidRequestError('Repo not found', 'NotFound')
+    const location = await this.getLocation(did)
+    let db: ActorDb
+    if (this.turso && location.dbName) {
+      const url = this.turso.buildDatabaseUrl(location.dbName)
+      db = getDb({
+        location: location.dbLocation,
+        disableWalAutoCheckpoint: this.cfg.disableWalAutoCheckpoint,
+        turso: {
+          url,
+          authToken: this.tursoCfg?.databaseAuthToken,
+        },
+      })
+    } else {
+      const exists = await fileExists(location.dbLocation)
+      if (!exists) {
+        throw new InvalidRequestError('Repo not found', 'NotFound')
+      }
+      db = getDb({
+        location: location.dbLocation,
+        disableWalAutoCheckpoint: this.cfg.disableWalAutoCheckpoint,
+      })
     }
-
-    const db = getDb(dbLocation, this.cfg.disableWalAutoCheckpoint)
 
     // run a simple select with retry logic to ensure the db is ready (not in wal recovery mode)
     try {
@@ -105,17 +141,43 @@ export class ActorStore {
   }
 
   async create(did: string, keypair: ExportableKeypair) {
-    const { directory, dbLocation, keyLocation } = await this.getLocation(did)
-    // ensure subdir exists
+    const location = await this.getLocation(did)
+    const { directory, dbLocation, keyLocation, dbName } = location
+    // ensure subdir exists (keys/did-op stay on disk even in turso mode)
     await mkdir(directory, { recursive: true })
-    const exists = await fileExists(dbLocation)
-    if (exists) {
-      throw new InvalidRequestError('Repo already exists', 'AlreadyExists')
+
+    if (this.turso && dbName) {
+      const alreadyExists = await this.turso.databaseExists(dbName)
+      if (alreadyExists) {
+        throw new InvalidRequestError('Repo already exists', 'AlreadyExists')
+      }
+    } else {
+      const exists = await fileExists(dbLocation)
+      if (exists) {
+        throw new InvalidRequestError('Repo already exists', 'AlreadyExists')
+      }
     }
+
     const privKey = await keypair.export()
     await fs.writeFile(keyLocation, privKey)
 
-    const db: ActorDb = getDb(dbLocation, this.cfg.disableWalAutoCheckpoint)
+    let db: ActorDb
+    if (this.turso && dbName) {
+      await this.turso.createDatabase(dbName)
+      db = getDb({
+        location: dbLocation,
+        disableWalAutoCheckpoint: this.cfg.disableWalAutoCheckpoint,
+        turso: {
+          url: this.turso.buildDatabaseUrl(dbName),
+          authToken: this.tursoCfg?.databaseAuthToken,
+        },
+      })
+    } else {
+      db = getDb({
+        location: dbLocation,
+        disableWalAutoCheckpoint: this.cfg.disableWalAutoCheckpoint,
+      })
+    }
     try {
       await db.ensureWal()
       const migrator = getMigrator(db)
@@ -138,7 +200,12 @@ export class ActorStore {
       })
     }
 
-    const { directory } = await this.getLocation(did)
+    const { directory, dbName } = await this.getLocation(did)
+    if (this.turso && dbName) {
+      await this.turso.deleteDatabase(dbName).catch((err) => {
+        blobStoreLogger.error('Failed to delete turso db', { did, dbName, err })
+      })
+    }
     await rmIfExists(directory, true)
   }
 

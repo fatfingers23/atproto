@@ -37,17 +37,48 @@ export const envToCfg = (env: ServerEnvironment): ServerConfig => {
 
   const disableWalAutoCheckpoint = env.disableWalAutoCheckpoint ?? false
 
+  let tursoAccountCfg: TursoDbConfig | null = null
+  if (env.tursoAccountDbUrl) {
+    tursoAccountCfg = {
+      url: env.tursoAccountDbUrl,
+      authToken: env.tursoDatabaseAuthToken,
+    }
+  }
+
+  let tursoSequencerCfg: TursoDbConfig | null = null
+  if (env.tursoSequencerDbUrl) {
+    tursoSequencerCfg = {
+      url: env.tursoSequencerDbUrl,
+      authToken: env.tursoDatabaseAuthToken,
+    }
+  }
+
   const dbCfg: ServerConfig['db'] = {
     accountDbLoc: env.accountDbLocation ?? dbLoc('account.sqlite'),
     sequencerDbLoc: env.sequencerDbLocation ?? dbLoc('sequencer.sqlite'),
     didCacheDbLoc: env.didCacheDbLocation ?? dbLoc('did_cache.sqlite'),
     disableWalAutoCheckpoint,
+    tursoAccount: tursoAccountCfg,
+    tursoSequencer: tursoSequencerCfg,
+  }
+
+  let tursoActorCfg: TursoActorStoreConfig | null = null
+  if (env.tursoApiToken && env.tursoOrgSlug && env.tursoActorDbUrlTemplate) {
+    tursoActorCfg = {
+      apiToken: env.tursoApiToken,
+      orgSlug: env.tursoOrgSlug,
+      group: env.tursoGroup,
+      databaseAuthToken: env.tursoDatabaseAuthToken,
+      dbNamePrefix: env.tursoActorDbNamePrefix ?? 'pds-actor-',
+      dbUrlTemplate: env.tursoActorDbUrlTemplate,
+    }
   }
 
   const actorStoreCfg: ServerConfig['actorStore'] = {
     directory: env.actorStoreDirectory ?? dbLoc('actors'),
     cacheSize: env.actorStoreCacheSize ?? 100,
     disableWalAutoCheckpoint,
+    turso: tursoActorCfg,
   }
 
   let blobstoreCfg: ServerConfig['blobstore']
@@ -400,17 +431,36 @@ export type ServiceConfig = {
   devMode: boolean
 }
 
+export type TursoDbConfig = {
+  url: string
+  authToken?: string
+}
+
+export type TursoActorStoreConfig = {
+  apiToken: string
+  orgSlug: string
+  group?: string
+  databaseAuthToken?: string
+  dbNamePrefix: string
+  // Template with {name} and optional {org} placeholders, e.g.
+  // "libsql://{name}-{org}.turso.io"
+  dbUrlTemplate: string
+}
+
 export type DatabaseConfig = {
   accountDbLoc: string
   sequencerDbLoc: string
   didCacheDbLoc: string
   disableWalAutoCheckpoint: boolean
+  tursoAccount: TursoDbConfig | null
+  tursoSequencer: TursoDbConfig | null
 }
 
 export type ActorStoreConfig = {
   directory: string
   cacheSize: number
   disableWalAutoCheckpoint: boolean
+  turso: TursoActorStoreConfig | null
 }
 
 export type S3BlobstoreConfig = {

@@ -54,6 +54,16 @@ export function readEnv() {
     sequencerDbLocation: envStr('PDS_SEQUENCER_DB_LOCATION'),
     didCacheDbLocation: envStr('PDS_DID_CACHE_DB_LOCATION'),
 
+    // turso (opt-in: when unset, account/sequencer/actor DBs use local sqlite)
+    tursoApiToken: envStr('PDS_TURSO_API_TOKEN'),
+    tursoOrgSlug: envStr('PDS_TURSO_ORG_SLUG'),
+    tursoGroup: envStr('PDS_TURSO_GROUP'),
+    tursoDatabaseAuthToken: envStr('PDS_TURSO_DATABASE_AUTH_TOKEN'),
+    tursoAccountDbUrl: envStr('PDS_TURSO_ACCOUNT_DB_URL'),
+    tursoSequencerDbUrl: envStr('PDS_TURSO_SEQUENCER_DB_URL'),
+    tursoActorDbNamePrefix: envStr('PDS_TURSO_ACTOR_DB_NAME_PREFIX'),
+    tursoActorDbUrlTemplate: envStr('PDS_TURSO_ACTOR_DB_URL_TEMPLATE'),
+
     // actor store
     actorStoreDirectory: envStr('PDS_ACTOR_STORE_DIRECTORY'),
     actorStoreCacheSize: envInt('PDS_ACTOR_STORE_CACHE_SIZE'),

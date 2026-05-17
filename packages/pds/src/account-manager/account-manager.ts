@@ -56,6 +56,7 @@ export class InvalidPasswordError extends AuthRequiredError {
 export type AccountManagerDbConfig = {
   accountDbLoc: string
   disableWalAutoCheckpoint: boolean
+  tursoAccount?: import('../config').TursoDbConfig | null
 }
 
 export class AccountManager {
@@ -68,7 +69,11 @@ export class AccountManager {
     readonly serviceHandleDomains: string[],
     db: AccountManagerDbConfig,
   ) {
-    this.db = getDb(db.accountDbLoc, db.disableWalAutoCheckpoint)
+    this.db = getDb({
+      location: db.accountDbLoc,
+      disableWalAutoCheckpoint: db.disableWalAutoCheckpoint,
+      turso: db.tursoAccount,
+    })
   }
 
   async migrateOrThrow() {

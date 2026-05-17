@@ -192,6 +192,7 @@ export class AppContext {
       crawlers,
       undefined,
       cfg.db.disableWalAutoCheckpoint,
+      cfg.db.tursoSequencer,
     )
     const redisScratch = cfg.redis
       ? getRedisClient(cfg.redis.address, cfg.redis.password)
