@@ -1,5 +1,13 @@
 # NOTE there is an additional build stage below that should match
-FROM node:20.20-alpine3.23 AS build
+FROM node:20.20-bookworm-slim AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    git \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable
 
@@ -58,9 +66,9 @@ RUN pnpm install --prod --shamefully-hoist --frozen-lockfile --prefer-offline --
 WORKDIR services/pds
 
 # Uses assets from build stage to reduce build size
-FROM node:20.20-alpine3.23
+FROM node:20.20-bookworm-slim
 
-RUN apk add --update dumb-init
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && rm -rf /var/lib/apt/lists/*
 
 # Avoid zombie processes, handle signal forwarding
 ENTRYPOINT ["dumb-init", "--"]
@@ -72,6 +80,7 @@ RUN mkdir /app/data && chown node /app/data
 VOLUME /app/data
 EXPOSE 3000
 ENV PDS_PORT=3000
+ENV PDS_DATA_DIRECTORY=/app/data
 ENV NODE_ENV=production
 # potential perf issues w/ io_uring on this version of node
 ENV UV_USE_IO_URING=0

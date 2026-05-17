@@ -60,9 +60,15 @@ export class ActorStore {
   }
 
   async keypair(did: string): Promise<Keypair> {
-    const { keyLocation } = await this.getLocation(did)
-    const privKey = await fs.readFile(keyLocation)
-    return crypto.Secp256k1Keypair.import(privKey)
+    if (this.turso) {
+      const db = await this.openDb(did)
+      try {
+        return await keypairFromDb(db)
+      } finally {
+        db.close()
+      }
+    }
+    return keypairFromDisk((await this.getLocation(did)).keyLocation)
   }
 
   async openDb(did: string): Promise<ActorDb> {
@@ -116,9 +122,11 @@ export class ActorStore {
     did: string,
     fn: (fn: ActorStoreTransactor) => T | PromiseLike<T>,
   ) {
-    const keypair = await this.keypair(did)
     const db = await this.openDb(did)
     try {
+      const keypair = this.turso
+        ? await keypairFromDb(db)
+        : await keypairFromDisk((await this.getLocation(did)).keyLocation)
       return await db.transaction((dbTxn) => {
         return fn(new ActorStoreTransactor(did, dbTxn, keypair, this.resources))
       })
@@ -131,9 +139,11 @@ export class ActorStore {
     did: string,
     fn: (fn: ActorStoreWriter) => T | PromiseLike<T>,
   ) {
-    const keypair = await this.keypair(did)
     const db = await this.openDb(did)
     try {
+      const keypair = this.turso
+        ? await keypairFromDb(db)
+        : await keypairFromDisk((await this.getLocation(did)).keyLocation)
       return await fn(new ActorStoreWriter(did, db, keypair, this.resources))
     } finally {
       db.close()
@@ -143,7 +153,7 @@ export class ActorStore {
   async create(did: string, keypair: ExportableKeypair) {
     const location = await this.getLocation(did)
     const { directory, dbLocation, keyLocation, dbName } = location
-    // ensure subdir exists (keys/did-op stay on disk even in turso mode)
+    // ensure subdir exists — did-op stays on disk even in turso mode
     await mkdir(directory, { recursive: true })
 
     if (this.turso && dbName) {
@@ -159,7 +169,10 @@ export class ActorStore {
     }
 
     const privKey = await keypair.export()
-    await fs.writeFile(keyLocation, privKey)
+    const tursoMode = !!(this.turso && dbName)
+    if (!tursoMode) {
+      await fs.writeFile(keyLocation, privKey)
+    }
 
     let db: ActorDb
     if (this.turso && dbName) {
@@ -187,6 +200,12 @@ export class ActorStore {
       await db.ensureWal()
       const migrator = getMigrator(db)
       await migrator.migrateToLatestOrThrow()
+      if (tursoMode) {
+        await db.db
+          .insertInto('actor_key')
+          .values({ id: 1, privKey })
+          .execute()
+      }
     } finally {
       db.close()
     }
@@ -268,6 +287,20 @@ const loadKey = async (loc: string): Promise<ExportableKeypair | undefined> => {
   const privKey = await readIfExists(loc)
   if (!privKey) return undefined
   return crypto.Secp256k1Keypair.import(privKey, { exportable: true })
+}
+
+const keypairFromDb = async (db: ActorDb): Promise<Keypair> => {
+  const row = await db.db
+    .selectFrom('actor_key')
+    .select('privKey')
+    .where('id', '=', 1)
+    .executeTakeFirstOrThrow()
+  return crypto.Secp256k1Keypair.import(row.privKey)
+}
+
+const keypairFromDisk = async (keyLocation: string): Promise<Keypair> => {
+  const privKey = await fs.readFile(keyLocation)
+  return crypto.Secp256k1Keypair.import(privKey)
 }
 
 function assertSafePathPart(part: string) {

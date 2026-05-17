@@ -1,4 +1,5 @@
 import * as accountPref from './account-pref'
+import * as actorKey from './actor-key'
 import * as backlink from './backlink'
 import * as blob from './blob'
 import * as record from './record'
@@ -7,6 +8,7 @@ import * as repoBlock from './repo-block'
 import * as repoRoot from './repo-root'
 
 export type DatabaseSchema = accountPref.PartialDB &
+  actorKey.PartialDB &
   repoRoot.PartialDB &
   record.PartialDB &
   backlink.PartialDB &
@@ -15,6 +17,7 @@ export type DatabaseSchema = accountPref.PartialDB &
   recordBlob.PartialDB
 
 export type { AccountPref } from './account-pref'
+export type { ActorKey } from './actor-key'
 export type { RepoRoot } from './repo-root'
 export type { Record } from './record'
 export type { Backlink } from './backlink'
