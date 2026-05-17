@@ -55,6 +55,7 @@ export class Database<Schema> {
   static libsql<T>(url: string, authToken?: string): Database<T> {
     const db = new Kysely<T>({
       dialect: new LibsqlDialect({ url, authToken }),
+      plugins: [new LibsqlBlobPlugin()],
     })
     return new Database(db, 'libsql')
   }
@@ -132,6 +133,30 @@ export class Database<Schema> {
 }
 
 type CommitHook = () => void
+
+// libsql returns blob columns as ArrayBuffer; better-sqlite3 returns them as
+// Buffer (a Uint8Array). Downstream consumers (e.g. CBOR decoders) assume the
+// latter. Normalize ArrayBuffer values on rows coming back from libsql.
+class LibsqlBlobPlugin implements KyselyPlugin {
+  transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
+    return args.node
+  }
+
+  async transformResult(
+    args: PluginTransformResultArgs,
+  ): Promise<QueryResult<UnknownRow>> {
+    const rows = args.result.rows
+    for (const row of rows) {
+      for (const key in row) {
+        const val = row[key]
+        if (val instanceof ArrayBuffer) {
+          row[key] = new Uint8Array(val)
+        }
+      }
+    }
+    return args.result
+  }
+}
 
 class LeakyTxPlugin implements KyselyPlugin {
   private txOver = false
