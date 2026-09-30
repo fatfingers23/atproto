@@ -104,6 +104,25 @@ const LEXICONS: LexiconDoc[] = [
   },
   {
     lexicon: 1,
+    id: 'io.example.asyncLimit',
+    defs: {
+      main: {
+        type: 'query',
+        parameters: {
+          type: 'params',
+          properties: {
+            key: { type: 'string' },
+            shouldCount: { type: 'boolean' },
+          },
+        },
+        output: {
+          encoding: 'application/json',
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
     id: 'io.example.noLimit',
     defs: {
       main: {
@@ -214,6 +233,24 @@ describe('Parameters', () => {
       body: ctx.params,
     }),
   })
+  server.method('io.example.asyncLimit', {
+    rateLimit: {
+      durationMs: 5 * MINUTE,
+      points: 3,
+      calcKey: async ({ params }) => {
+        await new Promise((resolve) => setImmediate(resolve))
+        return params.key as string
+      },
+      calcPoints: async ({ params }) => {
+        await new Promise((resolve) => setImmediate(resolve))
+        return params.shouldCount ? 1 : 0
+      },
+    },
+    handler: (ctx) => ({
+      encoding: 'json',
+      body: ctx.params,
+    }),
+  })
   server.method('io.example.noLimit', {
     handler: () => ({
       encoding: 'json',
@@ -308,6 +345,21 @@ describe('Parameters', () => {
       await makeCall(false)
     }
     await expect(() => makeCall(false)).rejects.toThrow('Rate Limit Exceeded')
+  })
+
+  it('supports async key and points calculation', async () => {
+    const makeCall = (key: string, shouldCount: boolean) =>
+      client.call('io.example.asyncLimit', { key, shouldCount })
+    for (let i = 0; i < 3; i++) {
+      await makeCall('a', true)
+    }
+    await expect(() => makeCall('a', true)).rejects.toThrow(
+      'Rate Limit Exceeded',
+    )
+    // Zero points resolved asynchronously skips the limiter
+    await makeCall('a', false)
+    // A different key resolved asynchronously has its own bucket
+    await makeCall('b', true)
   })
 
   it('applies global limits', async () => {

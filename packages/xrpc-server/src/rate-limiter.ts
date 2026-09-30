@@ -11,8 +11,10 @@ import { ResponseType, XRPCError } from './errors.js'
 
 export type { RateLimiterAbstract }
 
-export type CalcKeyFn<C = unknown> = (ctx: C) => string | null
-export type CalcPointsFn<C = unknown> = (ctx: C) => number
+export type CalcKeyFn<C = unknown> = (
+  ctx: C,
+) => string | null | Promise<string | null>
+export type CalcPointsFn<C = unknown> = (ctx: C) => number | Promise<number>
 
 export interface RateLimiterI<C = unknown> {
   consume: RateLimiterConsume<C>
@@ -91,12 +93,12 @@ export class RateLimiter<C = unknown> implements RateLimiterI<C> {
     opts?: RateLimiterConsumeOptions<C>,
   ): Promise<RateLimiterStatus | null> {
     const calcKey = opts?.calcKey ?? this.calcKey
-    const key = calcKey(ctx)
+    const key = await calcKey(ctx)
     if (key === null) {
       return null
     }
     const calcPoints = opts?.calcPoints ?? this.calcPoints
-    const points = calcPoints(ctx)
+    const points = await calcPoints(ctx)
     if (points < 1) {
       return null
     }
@@ -125,7 +127,7 @@ export class RateLimiter<C = unknown> implements RateLimiterI<C> {
   }
 
   async reset(ctx: C, opts?: RateLimiterResetOptions<C>): Promise<void> {
-    const key = opts?.calcKey ? opts.calcKey(ctx) : this.calcKey(ctx)
+    const key = await (opts?.calcKey ? opts.calcKey(ctx) : this.calcKey(ctx))
     if (key === null) {
       return
     }
